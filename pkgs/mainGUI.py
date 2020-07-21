@@ -81,6 +81,13 @@ class mainGUI(QDialog):
         self.pb_save.clicked.connect(self.save_position)
         self.pb_prob.clicked.connect(self.save_prob_map)
 
+        paleta = QPalette()
+        paleta.setColor(QPalette.Base, QColor("black"))
+        QToolTip.setFont(QFont('SansSerif', 10))
+        QToolTip.setPalette(paleta)
+        self.pb_zoomin.setToolTip('shortcut: \'s\'')
+        self.pb_zoomout.setToolTip('shortcut: \'a\'')
+        
         set_shadow_to_pb(self.pb_filename, 2, 2, 5)
         set_shadow_to_pb(self.pb_loadcsv, 2, 2, 5)
         set_shadow_to_pb(self.pb_save, 2, 2, 5)
