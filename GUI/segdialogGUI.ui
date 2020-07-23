@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Dialog</class>
+ <widget class="QDialog" name="Dialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>162</width>
+    <height>64</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Dialog</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog#Dialog {
+background-color: 'white';
+}</string>
+  </property>
+  <widget class="QFrame" name="frame">
+   <property name="geometry">
+    <rect>
+     <x>-10</x>
+     <y>0</y>
+     <width>174</width>
+     <height>67</height>
+    </rect>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">QFrame{
+background-color: 'white';
+}</string>
+   </property>
+   <property name="frameShape">
+    <enum>QFrame::StyledPanel</enum>
+   </property>
+   <property name="frameShadow">
+    <enum>QFrame::Raised</enum>
+   </property>
+   <widget class="QPushButton" name="pb_yes">
+    <property name="geometry">
+     <rect>
+      <x>21</x>
+      <y>32</y>
+      <width>65</width>
+      <height>23</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Tw Cen MT Condensed</family>
+      <pointsize>11</pointsize>
+     </font>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">QPushButton#pb_yes
+{
+background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 1, stop: 0 #5266FC, stop: 1 #3C25E3);
+color: #FFFFFF;
+border: none;
+border-radius: 8px;
+}
+QPushButton#pb_yes:pressed
+{
+margin: 1 1 1 1;
+}</string>
+    </property>
+    <property name="text">
+     <string>YES</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="pb_no">
+    <property name="geometry">
+     <rect>
+      <x>94</x>
+      <y>32</y>
+      <width>65</width>
+      <height>23</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Tw Cen MT Condensed</family>
+      <pointsize>11</pointsize>
+     </font>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">QPushButton#pb_no
+{
+background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 1, stop: 0 #5266FC, stop: 1 #3C25E3);
+color: #FFFFFF;
+border: none;
+border-radius: 8px;
+}
+QPushButton#pb_no:pressed
+{
+margin: 1 1 1 1;
+}</string>
+    </property>
+    <property name="text">
+     <string>NO</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_seg">
+    <property name="geometry">
+     <rect>
+      <x>20</x>
+      <y>0</y>
+      <width>151</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Tw Cen MT</family>
+      <pointsize>11</pointsize>
+     </font>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">QLabel#label_seg {
+background-color: transparent;
+}</string>
+    </property>
+    <property name="text">
+     <string>Segmentation process ?</string>
+    </property>
+   </widget>
+  </widget>
+  <widget class="QDialogButtonBox" name="buttonBox">
+   <property name="geometry">
+    <rect>
+     <x>100</x>
+     <y>90</y>
+     <width>156</width>
+     <height>23</height>
+    </rect>
+   </property>
+   <property name="standardButtons">
+    <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+   </property>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

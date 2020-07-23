@@ -16,6 +16,7 @@ from PyQt5.uic import loadUi
 from scipy.spatial.distance import cdist
 
 from .dialog.error import empty_firectory_error, empty_filename_error, file_does_not_exist_error
+from .dialog.segdialog import UI_segment
 from .style.pbutton import set_shadow_to_pb
 
 
@@ -37,6 +38,9 @@ def resize_image(im_path: Path):
     # resize the image into resolution `pixel_size`
     im_reso_factor = tfw[1] / pixel_size if tfw[:2] != (0, 1) else 1
     im_reso_shape = (im_shape * im_reso_factor).astype('int')
+    result = cv2.resize(im, (int(im_shape[1] * im_reso_factor),
+                             int(im_shape[0] * im_reso_factor)))
+    cv2.imwrite(str(im_path.parent.joinpath(f'{im_path.stem}_reso.tif')), result)
 
     im_size_factor = 1
     if any(im_reso_shape > size_limitation):
@@ -53,7 +57,7 @@ def resize_image(im_path: Path):
 class mainGUI(QDialog):    
     def __init__(self, data_path):
         super(mainGUI, self).__init__()
-        loadUi('mainGUI.ui', self)
+        loadUi('GUI/mainGUI.ui', self)
         self.setWindowTitle('Palm Position Checker')
         self.setFixedSize(self.width(), self.height())
 
@@ -134,6 +138,7 @@ class mainGUI(QDialog):
 
 
     def save_position(self):
+
         df = pd.DataFrame(np.rint(self._palm_pos/self._factor).astype('int'))
         df.to_csv(os.path.join(self._im_dir, 'palm_img_pos.csv'), header=None, index=None)
         self.label_info.setText("Save Done !")
@@ -141,6 +146,12 @@ class mainGUI(QDialog):
 
 
     def save_prob_map(self):
+
+        dialog_seg = UI_segment()
+        dialog_seg.show()
+        rsp = dialog_seg.exec_()  # 1: accepted, 0: rejected
+
+        print(self._im_shape)
         output = np.zeros((self._im_shape[0], self._im_shape[1], 3), dtype='uint8')
         
         for pos in self._palm_pos:
