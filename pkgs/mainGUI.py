@@ -15,9 +15,11 @@ from PyQt5.QtWidgets import *
 from PyQt5.uic import loadUi
 from scipy.spatial.distance import cdist
 
-from .dialog.error import empty_firectory_error, empty_filename_error, file_does_not_exist_error
+from .dialog.error import (empty_firectory_error, empty_error, invalid_format,
+                           file_does_not_exist_error, ratio_does_not_in_range)
 from .dialog.segdialog import UI_segment
 from .style.pbutton import set_shadow_to_pb
+from .op_segment_data_produce import save_train_data
 
 
 def load_position_data(path):
@@ -84,6 +86,7 @@ class mainGUI(QDialog):
         self.pb_loadcsv.clicked.connect(self.load_position)
         self.pb_save.clicked.connect(self.save_position)
         self.pb_prob.clicked.connect(self.save_prob_map)
+        self.pb_dataset.clicked.connect(self.dataset_producing)
 
         paleta = QPalette()
         paleta.setColor(QPalette.Base, QColor("black"))
@@ -96,6 +99,7 @@ class mainGUI(QDialog):
         set_shadow_to_pb(self.pb_loadcsv, 2, 2, 5)
         set_shadow_to_pb(self.pb_save, 2, 2, 5)
         set_shadow_to_pb(self.pb_prob, 2, 2, 5)
+        set_shadow_to_pb(self.pb_dataset, 2, 2, 5)
 
 
     def canvas_initial(self):
@@ -113,6 +117,9 @@ class mainGUI(QDialog):
                     self.pb_loadcsv.setEnabled(True)
                     self.pb_save.setEnabled(False)
                     self.pb_prob.setEnabled(False)
+                    self.lineEdit_crop_size.setEnabled(False)
+                    self.lineEdit_ratio.setEnabled(False)
+                    self.pb_dataset.setEnabled(False)
                     self._add_point = False
                     self.label_info.setText('Image Loaded.')
 
@@ -121,7 +128,7 @@ class mainGUI(QDialog):
             else:
                 empty_firectory_error(filename, self._data_path)
         else:
-            empty_filename_error()
+            empty_error('filename')
 
 
     def load_position(self):
@@ -146,12 +153,13 @@ class mainGUI(QDialog):
 
 
     def save_prob_map(self):
-
+        '''
         dialog_seg = UI_segment()
         dialog_seg.show()
         rsp = dialog_seg.exec_()  # 1: accepted, 0: rejected
 
         print(self._im_shape)
+        '''
         output = np.zeros((self._im_shape[0], self._im_shape[1], 3), dtype='uint8')
         
         for pos in self._palm_pos:
@@ -160,7 +168,34 @@ class mainGUI(QDialog):
 
         cv2.imwrite(os.path.join(self._im_dir, 'pr_palm.png'), output)
         self.label_info.setText("Save Map Done !")
+        self.lineEdit_crop_size.setEnabled(True)
+        self.lineEdit_ratio.setEnabled(True)
+        self.pb_dataset.setEnabled(True)
 
+
+    def dataset_producing(self):
+        self.label_info.setText("")
+        
+        try:
+            crop_size = int(self.lineEdit_crop_size.text())
+            overlap_ratio = float(self.lineEdit_ratio.text())
+        except ValueError:
+            if not self.lineEdit_crop_size.text():
+                empty_error('Crop Size')
+            elif not self.lineEdit_ratio.text():
+                empty_error('Overlap Ratio')
+            else:
+                invalid_format()
+            return
+
+        if overlap_ratio < 0 or overlap_ratio >= 1:
+            ratio_does_not_in_range()
+            return
+
+        im_path = self._im_dir.joinpath(f'{self._im_dir.stem}_reso.tif')
+        label_path = self._im_dir.joinpath('pr_palm.png')
+        save_train_data(im_path, label_path, crop_size, overlap_ratio)
+        self.label_info.setText("Dataset Completed !")
 
     #########################################
     ###          Canvas Functions         ###
