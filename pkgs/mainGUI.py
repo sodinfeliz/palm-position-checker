@@ -161,12 +161,14 @@ class mainGUI(QDialog):
         print(self._im_shape)
         '''
         output = np.zeros((self._im_shape[0], self._im_shape[1], 3), dtype='uint8')
+        output_fn = self._im_dir.joinpath('pr_palm.png')
         
         for pos in self._palm_pos:
             x, y = np.rint(pos / self._factor).astype('int')
             cv2.circle(output, (x, y), 20, (255, 255, 255), -1, cv2.LINE_AA)
 
-        cv2.imwrite(os.path.join(self._im_dir, 'pr_palm.png'), output)
+        output[output < 255] = 0 # cleaning the noise
+        cv2.imwrite(str(output_fn), output)
         self.label_info.setText("Save Map Done !")
         self.lineEdit_crop_size.setEnabled(True)
         self.lineEdit_ratio.setEnabled(True)

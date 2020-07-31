@@ -1,5 +1,6 @@
 from __future__ import absolute_import
 
+import os
 import cv2
 import numpy as np
 import shutil
@@ -21,7 +22,7 @@ def split_image(img,
         raise AttributeError(f'Dimension size must greater than crop size {crop_size}')
 
     path = Path(out_dir_path).joinpath(out_folder_name)
-    shutil.rmtree(path)
+    if path.exists(): shutil.rmtree(path)
     path.mkdir(parents=True, exist_ok=True)
 
     in_index = 0
@@ -39,7 +40,7 @@ def split_image(img,
                 bar.next()
 
 
-def coverage_filter(path: Path, ratio_lower=0.05, ratio_upper=0.90):
+def coverage_filter(path: Path, ratio_lower=None, ratio_upper=None):
     """ Removing the mask image with coverage less than 'ratio_lower' """
     def coverage_ratio(img):
         if np.amax(img) == 0:
@@ -51,16 +52,17 @@ def coverage_filter(path: Path, ratio_lower=0.05, ratio_upper=0.90):
 
     for p in Path(path).glob('*.png'):
         gray_im = cv2.imread(str(p), 0)
-        if coverage_ratio(gray_im) < ratio_lower:
-            p.unlink(missing_ok=True)
-        elif coverage_ratio(gray_im) > ratio_upper:
-            p.unlink(missing_ok=True)
+        r = coverage_ratio(gray_im)
+        if ratio_lower is not None and r < ratio_lower:
+            p.unlink()
+        elif ratio_upper is not None and r > ratio_upper:
+            p.unlink()
 
 
 def correspond_filter(image_folder: Path, label_folder: Path):
     for path in image_folder.glob('*.tif'):
         if not label_folder.joinpath(f'{path.stem}.png').exists():
-            path.unlink(missing_ok=True)
+            path.unlink()
 
 
 def save_train_data(im_path: Path, label_path: Path, crop_size, ratio):
@@ -69,7 +71,7 @@ def save_train_data(im_path: Path, label_path: Path, crop_size, ratio):
 
     im = cv2.imread(str(im_path))
     label_im_vision = cv2.imread(str(label_path), 0)
-    label_im = label_im_vision / 255.
+    label_im = label_im_vision.astype('float') / 255.
 
     # splitting the image into subtiles by 'crop_size' and 'ratio'
     split_image(im, crop_size=crop_size, overlap=ratio, out_format='tif',
