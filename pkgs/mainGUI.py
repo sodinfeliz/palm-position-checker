@@ -5,9 +5,7 @@ import cv2
 import gdal
 import numpy as np
 import pandas as pd
-import threading
 from pathlib import Path
-from glob import glob
 from pandas import read_csv
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
@@ -15,11 +13,9 @@ from PyQt5.QtWidgets import *
 from PyQt5.uic import loadUi
 from scipy.spatial.distance import cdist
 
-from .dialog.error import (empty_firectory_error, empty_error, invalid_format,
-                           file_does_not_exist_error, ratio_does_not_in_range)
-from .dialog.segdialog import UI_segment
-from .style.pbutton import set_shadow_to_pb
+from .dialog.error import warning_msg
 from .op_segment_data_produce import save_train_data
+from .item import PalmPositionCanvas
 
 
 def load_position_data(path):
@@ -56,14 +52,16 @@ def resize_image(im_path: Path):
     return im_path, im_reso_shape, im_size_factor
 
 
-class mainGUI(QDialog):    
-    def __init__(self, data_path):
+class mainGUI(QMainWindow):    
+    def __init__(self):
         super(mainGUI, self).__init__()
         loadUi('GUI/mainGUI.ui', self)
         self.setWindowTitle('Palm Position Checker')
         self.setFixedSize(self.width(), self.height())
+        self.setWindowFlags(Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.moveWidgetToCenter()
 
-        self._data_path = data_path
         self._add_point = False
         self._zoom = 0
         self._empty = True
@@ -77,10 +75,10 @@ class mainGUI(QDialog):
         self._palm_pos_items = []
 
         self.view_canvas.setScene(self._scene)
-        self.pb_filename.setEnabled(True)
+        self.pb_openfile.setEnabled(True)
 
         # connection between buttons and functions
-        self.pb_filename.clicked.connect(self.canvas_initial)
+        self.pb_openfile.clicked.connect(self.file_open)
         self.pb_zoomin.clicked.connect(self.zoom_in)
         self.pb_zoomout.clicked.connect(self.zoom_out)
         self.pb_loadcsv.clicked.connect(self.load_position)
@@ -88,64 +86,65 @@ class mainGUI(QDialog):
         self.pb_prob.clicked.connect(self.save_prob_map)
         self.pb_dataset.clicked.connect(self.dataset_producing)
 
+        self.lineEdit_crop_size.setPlaceholderText('Crop Size')
+        self.lineEdit_ratio.setPlaceholderText('Overlap Ratio')
+        
         paleta = QPalette()
         paleta.setColor(QPalette.Base, QColor("black"))
         QToolTip.setFont(QFont('SansSerif', 10))
         QToolTip.setPalette(paleta)
         self.pb_zoomin.setToolTip('shortcut: \'s\'')
         self.pb_zoomout.setToolTip('shortcut: \'a\'')
-        
-        set_shadow_to_pb(self.pb_filename, 2, 2, 5)
-        set_shadow_to_pb(self.pb_loadcsv, 2, 2, 5)
-        set_shadow_to_pb(self.pb_save, 2, 2, 5)
-        set_shadow_to_pb(self.pb_prob, 2, 2, 5)
-        set_shadow_to_pb(self.pb_dataset, 2, 2, 5)
 
 
-    def canvas_initial(self):
-        filename = self.lineEdit_filename.text()
-        if filename:
-            if filename in os.listdir(self._data_path):
-                self._im_dir = self._data_path.joinpath(filename)
-                im_path = self._im_dir.joinpath(f'{filename}.tif')
+    def file_open(self):
+        self._im_path, _ = QFileDialog.getOpenFileName(self, 'Open File')
+        if not self._im_path:  # cancel button pressed
+            return
 
-                if im_path.is_file():
-                    im_path, self._im_shape, self._factor = resize_image(im_path)
+        self._im_path = Path(self._im_path)
+        self._im_dir = self._im_path.parent
+        self._filename = self._im_dir.stem
 
-                    self._clean_pos_items()
-                    self.setPhoto(QPixmap(im_path))
-                    self.pb_loadcsv.setEnabled(True)
-                    self.pb_save.setEnabled(False)
-                    self.pb_prob.setEnabled(False)
-                    self.lineEdit_crop_size.setEnabled(False)
-                    self.lineEdit_ratio.setEnabled(False)
-                    self.pb_dataset.setEnabled(False)
-                    self._add_point = False
-                    self.label_info.setText('Image Loaded.')
-
-                else:
-                    file_does_not_exist_error()
-            else:
-                empty_firectory_error(filename, self._data_path)
+        types = ['.png', '.jpeg', '.tif']
+        if self._im_path.suffix not in types:
+            warning_msg(f"The suffix {self._im_path.suffix} is not supported.")
         else:
-            empty_error('filename')
+            self.canvas_initial(Path(self._im_path))
+
+
+    def canvas_initial(self, im_path):
+        im_path, self._im_shape, self._factor = resize_image(im_path)
+
+        self._clean_pos_items()
+        self.setPhoto(QPixmap(im_path))
+        self.pb_loadcsv.setEnabled(True)
+        self.pb_save.setEnabled(False)
+        self.pb_prob.setEnabled(False)
+        self.lineEdit_crop_size.setEnabled(False)
+        self.lineEdit_ratio.setEnabled(False)
+        self.pb_dataset.setEnabled(False)
+        self.label_info.setText('Image Loaded.')
+        self._add_point = False
 
 
     def load_position(self):
-        pos_path = self._im_dir.joinpath('palm_img_pos.csv')
-        self._palm_pos = load_position_data(str(pos_path))
+        pos_path, _ = QFileDialog.getOpenFileName(self, 'Open File')
+        if not pos_path:  # cancel button pressed
+            return
+
+        self._palm_pos = load_position_data(pos_path)
         self._palm_pos = np.rint(self._palm_pos*self._factor).astype(self._palm_pos.dtype)
 
         for x, y in self._palm_pos:
             self._palm_pos_items.append(self._add_item_to_scene(PosCircleItem(x, y, 'red')))
 
         self.pb_save.setEnabled(True)
-        self._add_point = True
         self.label_info.setText('')
+        self._add_point = True
 
 
     def save_position(self):
-
         df = pd.DataFrame(np.rint(self._palm_pos/self._factor).astype('int'))
         df.to_csv(os.path.join(self._im_dir, 'palm_img_pos.csv'), header=None, index=None)
         self.label_info.setText("Save Done !")
@@ -153,13 +152,6 @@ class mainGUI(QDialog):
 
 
     def save_prob_map(self):
-        '''
-        dialog_seg = UI_segment()
-        dialog_seg.show()
-        rsp = dialog_seg.exec_()  # 1: accepted, 0: rejected
-
-        print(self._im_shape)
-        '''
         output = np.zeros((self._im_shape[0], self._im_shape[1], 3), dtype='uint8')
         output_fn = self._im_dir.joinpath('pr_palm.png')
         
@@ -183,15 +175,15 @@ class mainGUI(QDialog):
             overlap_ratio = float(self.lineEdit_ratio.text())
         except ValueError:
             if not self.lineEdit_crop_size.text():
-                empty_error('Crop Size')
+                warning_msg('Crop size cell is empty.')
             elif not self.lineEdit_ratio.text():
-                empty_error('Overlap Ratio')
+                warning_msg('Overlap ratio cell is empty.')
             else:
-                invalid_format()
+                warning_msg("Crop size/Overlap ratio format invalid.")
             return
 
         if overlap_ratio < 0 or overlap_ratio >= 1:
-            ratio_does_not_in_range()
+            warning_msg("Overlap Ratio must in range [0,1).")
             return
 
         im_path = self._im_dir.joinpath(f'{self._im_dir.stem}_reso.tif')
@@ -306,6 +298,13 @@ class mainGUI(QDialog):
         for it in self._palm_pos_items:
             self._scene.removeItem(it.item)
         self._palm_pos_items = []
+
+    
+    def moveWidgetToCenter(self):
+        qr = self.frameGeometry()
+        cp = QDesktopWidget().availableGeometry().center()
+        qr.moveCenter(cp)
+        self.move(qr.topLeft())
 
 
 class PosCircleItem():
