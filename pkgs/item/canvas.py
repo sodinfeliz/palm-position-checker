@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-import threading
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
@@ -54,7 +53,7 @@ class PhotoViewer(QGraphicsView):
             self._empty = False
             self.setDragMode(QGraphicsView.ScrollHandDrag)
             self._photo.setPixmap(pixmap)
-            print(self._photo.pixmap().rect())
+            #print(self._photo.pixmap().rect())
         else:
             self._empty = True
             self.setDragMode(QGraphicsView.NoDrag)
@@ -96,154 +95,73 @@ class PhotoViewer(QGraphicsView):
 
 #################################################
 #################################################
+from pandas import read_csv
+from scipy.spatial.distance import cdist
+from .circle import PosCircleItem
 
 
 class PalmPositionCanvas(PhotoViewer):
     def __init__(self, parent, geometry: tuple):
-        super(PalmPositionCanvas).__init__(parent)
+        super(PalmPositionCanvas, self).__init__(parent)
         self.setStyleSheet("background-color: #EFF8F4;")
         self.setGeometry(*geometry)
+        self._factor = 1.
         self._add_point = False
-        
+        self._palm_pos = []
+        self._palm_pos_items = []
 
 
+    def mouseDoubleClickEvent(self, event):
+        if self._add_point:    
+            pos = self.mapToScene(event.pos().x(), event.pos().y())
+            pos = [round(pos.x()), round(pos.y())]
 
-
-
-
-
-
-
-
-
-
-
-class LabelCanvas(PhotoViewer):
-
-    add_item_signal = pyqtSignal(QPointF)
-    delete_item_signal = pyqtSignal(QPointF)
-
-    def __init__(self, parent):
-        super(LabelCanvas, self).__init__(parent)
-        self.setStyleSheet("background-color: #EDF3FF;")
-        self.setGeometry(63, 51, 1143, 850)
-        self.all_items = []
-        self.in_items_range = False
-
-
-    def mousePressEvent(self, mouseEvent):
-        if mouseEvent.buttons() == Qt.RightButton and mouseEvent.modifiers() == Qt.ShiftModifier:
-            self.delete_item_signal.emit(self.mapToScene(mouseEvent.pos()))
-        elif not self.in_items_range and mouseEvent.buttons() == Qt.LeftButton and mouseEvent.modifiers() == Qt.NoModifier:
-            self.add_item_signal.emit(self.mapToScene(mouseEvent.pos()))
-        super().mousePressEvent(mouseEvent)
-
-    
-    def mouseMoveEvent(self, mouseEvent):
-        for it in self.all_items:
-            if it.rect().contains(self.mapToScene(mouseEvent.pos())):
-                self.in_items_range = True
-                break
+            if len(self._palm_pos) == 0:
+                self._palm_pos = np.vstack((self._palm_pos, pos))
+                self._palm_pos_items.append(self.add_item_to_scene(PosCircleItem(pos[0], pos[1], 'red')))
             else:
-                self.in_items_range = False
-        super().mouseMoveEvent(mouseEvent)
+                if cdist([pos], self._palm_pos).min() <= round(30*self._factor):
+                    index = cdist([pos], self._palm_pos).argmin()
+                    self._palm_pos = np.delete(self._palm_pos, index, axis=0)
+                    self._scene.removeItem(self._palm_pos_items[index].item)
+                    del self._palm_pos_items[index]
+                else:
+                    self._palm_pos = np.vstack((self._palm_pos, pos))
+                    self._palm_pos_items.append(self.add_item_to_scene(PosCircleItem(pos[0], pos[1], 'red')))
 
 
     def add_item_to_scene(self, it):
-        self.all_items.append(it)
-        self._scene.addItem(it)
-        self._scene.addItem(it.lback)
-        self._scene.addItem(it.label)
+        self._scene.addItem(it.item)
+        return it
 
 
-    def delete_item_on_scene(self, it):
-        index = self.all_items.index(it)
-        del self.all_items[index]
-        self._scene.removeItem(it)
-        self._scene.removeItem(it.lback)
-        self._scene.removeItem(it.label)
+    def add_point(self):
+        return self._add_point
 
 
-    def clear_items(self):
-        for it in self.all_items:
-            self._scene.removeItem(it)
-            self._scene.removeItem(it.lback)
-            self._scene.removeItem(it.label)
-        self.all_items = []
-        
-
-#################################################
-#################################################
+    def clean_all_pos_items(self):
+        for it in self._palm_pos_items:
+            self._scene.removeItem(it.item)
+        self._palm_pos_items = []
 
 
-class CropCanvas(PhotoViewer):
-    def __init__(self, parent):
-        super(CropCanvas, self).__init__(parent)
-        self.setStyleSheet("background-color: #EDF3FF;")
-        self.setGeometry(63, 51, 1143, 850)
-        self._grabbed = False
-        self.crop_win = []
+    def initial_palm_pos(self, path):
+        try:
+            self._palm_pos = np.array(read_csv(path))
+        except:
+            self._palm_pos = np.empty([0, 2], dtype='int')
+
+        self._palm_pos = np.rint(self._palm_pos*self._factor).astype(self._palm_pos.dtype)
+        self._add_point = True
+
+        for x, y in self._palm_pos:
+            self._palm_pos_items.append(self.add_item_to_scene(PosCircleItem(x, y, 'red')))
 
 
-    def mousePressEvent(self, mouseEvent):
-        if mouseEvent.modifiers() == Qt.ShiftModifier and mouseEvent.buttons() == Qt.RightButton:
-            mousePos = self.mapToScene(mouseEvent.pos())
-            for idx, it in enumerate(self.crop_win):
-                if it.current_rect.contains(mousePos):
-                    self._scene.removeItem(it)
-                    del self.crop_win[idx]
-                    self.focusBackImage()
-                    break
-        super().mousePressEvent(mouseEvent)
+    def set_factor(self, factor):
+        self._factor = factor
 
 
-    def mouseReleaseEvent(self, mouseEvent):
-        if self.grabbed:
-            self.focusBackImage()
-            self.grabbed = False
-        super().mouseReleaseEvent(mouseEvent)
-
-
-    def mouseMoveEvent(self, mouseEvent):
-        self.grabbed = True if self._scene.mouseGrabberItem() else False
-        if mouseEvent.modifiers() == Qt.ControlModifier or self._scene.mouseGrabberItem():
-            super().mouseMoveEvent(mouseEvent)
-
-
-    def add_item_to_scene(self, it):
-        self.crop_win.append(it)
-        self._scene.addItem(it)
-        self.focusBackImage()
-
-
-    def clear_all_items(self):
-        for it in self.crop_win:
-            self._scene.removeItem(it)
-        self.crop_win = []
-
-
-    def all_crop_bboxes(self):
-        bboxes = []
-        for it in self.crop_win:
-            x, y, w, h = list(map(int, it.current_rect.getRect()))
-            bboxes.append([x, y, x + w, y + h])
-        return bboxes
-
-
-    def focusBackImage(self):
-        height, width, channel = self.back_im.shape
-
-        crop_region = np.zeros((self.back_im.shape[0], self.back_im.shape[1]), dtype='uint8')
-        for it in self.crop_win:
-            xmin, ymin, w, h = list(map(int, it.current_rect.getRect()))
-            crop_region[max(0, ymin): ymin + h, max(0, xmin): xmin + w] = 1
-
-        mask = self.back_im.copy()
-        for ch in range(channel):
-            mask[..., ch] *= crop_region
-
-        mRatio = 0.65
-        dst = cv2.addWeighted(self.back_im, 1 - mRatio, mask, mRatio, 0)
-        qDst = QImage(dst, width, height, QImage.Format_RGB888)
-        self._photo.setPixmap(QPixmap.fromImage(qDst))
+    def set_add_point_mode(self, switch):
+        self._add_point = switch
 

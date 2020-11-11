@@ -6,23 +6,14 @@ import gdal
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from pandas import read_csv
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from PyQt5.uic import loadUi
-from scipy.spatial.distance import cdist
 
 from .dialog.error import warning_msg
 from .op_segment_data_produce import save_train_data
 from .item import PalmPositionCanvas
-
-
-def load_position_data(path):
-    try:
-        return np.array(read_csv(path))
-    except:
-        return np.empty([0, 2], dtype='int')
 
 
 def resize_image(im_path: Path):
@@ -60,41 +51,25 @@ class mainGUI(QMainWindow):
         self.setFixedSize(self.width(), self.height())
         self.setWindowFlags(Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.moveWidgetToCenter()
+        self._moveWidgetToCenter()
 
-        self._add_point = False
-        self._zoom = 0
-        self._empty = True
-        self._scene = QGraphicsScene()
-        self._photo = QGraphicsPixmapItem()
-        self._scene.addItem(self._photo)
         self._im_shape = []
         self._im_dir = ''
         self._factor = 0
         self._palm_pos = ''
-        self._palm_pos_items = []
 
-        self.view_canvas.setScene(self._scene)
-        self.pb_openfile.setEnabled(True)
-
-        # connection between buttons and functions
+        # canvas initialization
+        self.view_canvas = PalmPositionCanvas(self, (15, 47, 962, 850))
+        
+        # push buttons setting
         self.pb_openfile.clicked.connect(self.file_open)
-        self.pb_zoomin.clicked.connect(self.zoom_in)
-        self.pb_zoomout.clicked.connect(self.zoom_out)
         self.pb_loadcsv.clicked.connect(self.load_position)
         self.pb_save.clicked.connect(self.save_position)
         self.pb_prob.clicked.connect(self.save_prob_map)
         self.pb_dataset.clicked.connect(self.dataset_producing)
 
-        self.lineEdit_crop_size.setPlaceholderText('Crop Size')
-        self.lineEdit_ratio.setPlaceholderText('Overlap Ratio')
-        
-        paleta = QPalette()
-        paleta.setColor(QPalette.Base, QColor("black"))
-        QToolTip.setFont(QFont('SansSerif', 10))
-        QToolTip.setPalette(paleta)
-        self.pb_zoomin.setToolTip('shortcut: \'s\'')
-        self.pb_zoomout.setToolTip('shortcut: \'a\'')
+        self.le_crop_size.setPlaceholderText('Crop Size')
+        self.le_overlap_ratio.setPlaceholderText('Overlap Ratio')
 
 
     def file_open(self):
@@ -116,38 +91,37 @@ class mainGUI(QMainWindow):
     def canvas_initial(self, im_path):
         im_path, self._im_shape, self._factor = resize_image(im_path)
 
-        self._clean_pos_items()
-        self.setPhoto(QPixmap(im_path))
+        self.view_canvas.setPhoto(im_path)
+        self.view_canvas.set_factor(self._factor)
+        self.view_canvas.set_add_point_mode(False)
+        self.view_canvas.clean_all_pos_items()
+
+        self.pb_dataset.setEnabled(False)
         self.pb_loadcsv.setEnabled(True)
         self.pb_save.setEnabled(False)
         self.pb_prob.setEnabled(False)
-        self.lineEdit_crop_size.setEnabled(False)
-        self.lineEdit_ratio.setEnabled(False)
-        self.pb_dataset.setEnabled(False)
-        self.label_info.setText('Image Loaded.')
-        self._add_point = False
+        self.le_crop_size.setEnabled(False)
+        self.le_overlap_ratio.setEnabled(False)
+        self.info_display.setText('Image Loaded.')
 
 
     def load_position(self):
         pos_path, _ = QFileDialog.getOpenFileName(self, 'Open File')
+        
         if not pos_path:  # cancel button pressed
             return
+        elif Path(pos_path).suffix != '.csv':
+            warning_msg('Only supporting the csv extension.')
 
-        self._palm_pos = load_position_data(pos_path)
-        self._palm_pos = np.rint(self._palm_pos*self._factor).astype(self._palm_pos.dtype)
-
-        for x, y in self._palm_pos:
-            self._palm_pos_items.append(self._add_item_to_scene(PosCircleItem(x, y, 'red')))
-
+        self.view_canvas.initial_palm_pos(pos_path)
         self.pb_save.setEnabled(True)
-        self.label_info.setText('')
-        self._add_point = True
+        self.info_display.setText('')
 
 
     def save_position(self):
-        df = pd.DataFrame(np.rint(self._palm_pos/self._factor).astype('int'))
+        df = pd.DataFrame(np.rint(self.view_canvas._palm_pos/self._factor).astype('int'))
         df.to_csv(os.path.join(self._im_dir, 'palm_img_pos.csv'), header=None, index=None)
-        self.label_info.setText("Save Done !")
+        self.info_display.setText("Save Done !")
         self.pb_prob.setEnabled(True)
 
 
@@ -155,28 +129,28 @@ class mainGUI(QMainWindow):
         output = np.zeros((self._im_shape[0], self._im_shape[1], 3), dtype='uint8')
         output_fn = self._im_dir.joinpath('pr_palm.png')
         
-        for pos in self._palm_pos:
+        for pos in self.view_canvas._palm_pos:
             x, y = np.rint(pos / self._factor).astype('int')
             cv2.circle(output, (x, y), 20, (255, 255, 255), -1, cv2.LINE_AA)
 
         output[output < 255] = 0 # cleaning the noise
         cv2.imwrite(str(output_fn), output)
-        self.label_info.setText("Save Map Done !")
-        self.lineEdit_crop_size.setEnabled(True)
-        self.lineEdit_ratio.setEnabled(True)
+        self.info_display.setText("Save Map Done !")
+        self.le_crop_size.setEnabled(True)
+        self.le_overlap_ratio.setEnabled(True)
         self.pb_dataset.setEnabled(True)
 
 
     def dataset_producing(self):
-        self.label_info.setText("")
+        self.info_display.setText("")
         
         try:
-            crop_size = int(self.lineEdit_crop_size.text())
-            overlap_ratio = float(self.lineEdit_ratio.text())
+            crop_size = int(self.le_crop_size.text())
+            overlap_ratio = float(self.le_overlap_ratio.text())
         except ValueError:
-            if not self.lineEdit_crop_size.text():
+            if not self.le_crop_size.text():
                 warning_msg('Crop size cell is empty.')
-            elif not self.lineEdit_ratio.text():
+            elif not self.le_overlap_ratio.text():
                 warning_msg('Overlap ratio cell is empty.')
             else:
                 warning_msg("Crop size/Overlap ratio format invalid.")
@@ -189,132 +163,12 @@ class mainGUI(QMainWindow):
         im_path = self._im_dir.joinpath(f'{self._im_dir.stem}_reso.tif')
         label_path = self._im_dir.joinpath('pr_palm.png')
         save_train_data(im_path, label_path, crop_size, overlap_ratio)
-        self.label_info.setText("Dataset Completed !")
-
-    #########################################
-    ###          Canvas Functions         ###
-    #########################################
-
-    def hasPhoto(self):
-        return not self._empty
+        self.info_display.setText("Dataset Completed !")
 
     
-    def fitInView(self, scale=True):
-        rect = QRectF(self._photo.pixmap().rect())
-        if not rect.isNull():
-            self.view_canvas.setSceneRect(rect)
-            if self.hasPhoto():
-                unity = self.view_canvas.transform().mapRect(QRectF(0, 0, 1, 1))
-                self.view_canvas.scale(1 / unity.width(), 1 / unity.height())
-                viewrect = self.view_canvas.viewport().rect()
-                scenerect = self.view_canvas.transform().mapRect(rect)
-                factor = max(viewrect.width() / scenerect.width(),
-                             viewrect.height() / scenerect.height())
-                self.view_canvas.scale(factor, factor)
-            self._zoom = 0
-
-
-    def setPhoto(self, pixmap=None):
-        self._zoom = 0
-        if pixmap and not pixmap.isNull():
-            self._empty = False
-            self.view_canvas.setDragMode(QGraphicsView.ScrollHandDrag)
-            self._photo.setPixmap(pixmap)
-        else:
-            self._empty = True
-            self.view_canvas.setDragMode(QGraphicsView.NoDrag)
-            self._photo.setPixmap(QPixmap())
-        self.fitInView()
-
-
-    def zoom_in(self):
-        if self.hasPhoto():
-            factor = 1.25
-            self._zoom += 1
-            if self._zoom > 0:
-                self.view_canvas.scale(factor, factor)
-            elif self._zoom == 0:
-                self.fitInView()
-            else:
-                self._zoom = 0
-
-
-    def zoom_out(self):
-        if self.hasPhoto():
-            factor = 0.8
-            self._zoom -= 1
-            if self._zoom > 0:
-                self.view_canvas.scale(factor, factor)
-            elif self._zoom == 0:
-                self.fitInView()
-            else:
-                self._zoom = 0    
-
-                
-    def toggleDragMode(self):
-        if self.view_canvas.dragMode() == QGraphicsView.ScrollHandDrag:
-            self.view_canvas.setDragMode(QGraphicsView.NoDrag)
-        elif not self._photo.pixmap().isNull():
-            self.view_canvas.setDragMode(QGraphicsView.ScrollHandDrag)
-
-
-    def keyPressEvent(self, event):
-        if self._add_point:
-            if event.text() == 's':
-                self.zoom_in()
-            elif event.text() == 'a':
-                self.zoom_out()
-
-
-    def mouseDoubleClickEvent(self, event):
-        if self._add_point: 
-            widget_x, widget_y = self.view_canvas.pos().x(), self.view_canvas.pos().y()
-            pos = self.view_canvas.mapToScene(event.x() - widget_x, event.y() - widget_y)
-            pos = [round(pos.x()), round(pos.y())]
-
-            if len(self._palm_pos) == 0:
-                self._palm_pos = np.vstack((self._palm_pos, pos))
-                self._palm_pos_items.append(self._add_item_to_scene(PosCircleItem(pos[0], pos[1], 'red')))
-            else:
-                if cdist([pos], self._palm_pos).min() <= round(30*self._factor):
-                    index = cdist([pos], self._palm_pos).argmin()
-                    self._palm_pos = np.delete(self._palm_pos, index, axis=0)
-                    self._scene.removeItem(self._palm_pos_items[index].item)
-                    del self._palm_pos_items[index]
-                else:
-                    self._palm_pos = np.vstack((self._palm_pos, pos))
-                    self._palm_pos_items.append(self._add_item_to_scene(PosCircleItem(pos[0], pos[1], 'red')))
-            
-            self.label_info.setText('')
-            self.pb_prob.setEnabled(False)
-
-
-    def _add_item_to_scene(self, it):
-        self._scene.addItem(it.item)
-        return it
-
-
-    def _clean_pos_items(self):
-        for it in self._palm_pos_items:
-            self._scene.removeItem(it.item)
-        self._palm_pos_items = []
-
-    
-    def moveWidgetToCenter(self):
+    def _moveWidgetToCenter(self):
         qr = self.frameGeometry()
         cp = QDesktopWidget().availableGeometry().center()
         qr.moveCenter(cp)
         self.move(qr.topLeft())
-
-
-class PosCircleItem():
-    def __init__(self, x, y, color='red'):
-        self.item = self._set_item(x, y, color)
-
-    def _set_item(self, x, y, color):
-        qt_colors = {'red': Qt.red, 'blue': Qt.blue}
-        circle = QGraphicsEllipseItem(x-6, y-6, 12, 12)
-        circle.setBrush(QBrush(qt_colors[color], style = Qt.SolidPattern))
-        return circle
-
 
