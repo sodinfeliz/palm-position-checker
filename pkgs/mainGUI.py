@@ -11,8 +11,8 @@ from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from PyQt5.uic import loadUi
 
-from .dialog.error import warning_msg
-from .op_segment_data_produce import save_train_data
+from .dialog import warning_msg, exit_dialog
+from .utils.datautils import save_train_data
 from .item import PalmPositionCanvas
 
 
@@ -59,7 +59,8 @@ class mainGUI(QMainWindow):
         self._palm_pos = ''
 
         # canvas initialization
-        self.view_canvas = PalmPositionCanvas(self, (15, 47, 962, 850))
+        vc_geometry = self.view_canvas.geometry()
+        self.view_canvas = PalmPositionCanvas(self, vc_geometry)
         
         # push buttons setting
         self.pb_openfile.clicked.connect(self.file_open)
@@ -67,9 +68,11 @@ class mainGUI(QMainWindow):
         self.pb_save.clicked.connect(self.save_position)
         self.pb_prob.clicked.connect(self.save_prob_map)
         self.pb_dataset.clicked.connect(self.dataset_producing)
-
+        self.pb_leave.clicked.connect(self._exit_progress)
         self.le_crop_size.setPlaceholderText('Crop Size')
         self.le_overlap_ratio.setPlaceholderText('Overlap Ratio')
+
+        QShortcut(Qt.Key_Escape, self, self._exit_progress)
 
 
     def file_open(self):
@@ -127,7 +130,7 @@ class mainGUI(QMainWindow):
 
     def save_prob_map(self):
         output = np.zeros((self._im_shape[0], self._im_shape[1], 3), dtype='uint8')
-        output_fn = self._im_dir.joinpath('pr_palm.png')
+        output_fn = self._im_dir.joinpath(f'{self._filename}_mask.png')
         
         for pos in self.view_canvas._palm_pos:
             x, y = np.rint(pos / self._factor).astype('int')
@@ -160,10 +163,12 @@ class mainGUI(QMainWindow):
             warning_msg("Overlap Ratio must in range [0,1).")
             return
 
-        im_path = self._im_dir.joinpath(f'{self._im_dir.stem}_reso.tif')
-        label_path = self._im_dir.joinpath('pr_palm.png')
-        save_train_data(im_path, label_path, crop_size, overlap_ratio)
+        im_path = self._im_dir.joinpath(f'{self._filename}_reso.tif')
+        label_path = self._im_dir.joinpath(f'{self._filename}_mask.png')
+        save_train_data(im_path, label_path, crop_size, overlap_ratio, self._filename)
+
         self.info_display.setText("Dataset Completed !")
+        #self.pb_dataset.setEnabled(False)
 
     
     def _moveWidgetToCenter(self):
@@ -171,4 +176,17 @@ class mainGUI(QMainWindow):
         cp = QDesktopWidget().availableGeometry().center()
         qr.moveCenter(cp)
         self.move(qr.topLeft())
+
+
+    def _exit_progress(self):
+        ## NEED to be modified !!!!!!
+        if self.view_canvas.hasPhoto():
+            ret = exit_dialog()
+            chs = {'Yes': 16384, 'No': 65536}
+
+            if ret == chs['Yes']:
+                self.save_position()
+                self.save_prob_map()
+        self.close()
+
 

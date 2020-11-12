@@ -101,10 +101,10 @@ from .circle import PosCircleItem
 
 
 class PalmPositionCanvas(PhotoViewer):
-    def __init__(self, parent, geometry: tuple):
+    def __init__(self, parent, geometry: QRect):
         super(PalmPositionCanvas, self).__init__(parent)
-        self.setStyleSheet("background-color: #EFF8F4;")
-        self.setGeometry(*geometry)
+        self.setStyleSheet("background-color: #EFF8F4; border-radius: 7px;")
+        self.setGeometry(geometry)
         self._factor = 1.
         self._add_point = False
         self._palm_pos = []
